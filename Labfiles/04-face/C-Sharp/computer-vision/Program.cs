@@ -5,7 +5,8 @@ using Azure;
 using System.IO;
 
 // Import namespaces
-
+using Azure.AI.Vision.Common;
+using Azure.AI.Vision.ImageAnalysis;
 
 namespace detect_people
 {

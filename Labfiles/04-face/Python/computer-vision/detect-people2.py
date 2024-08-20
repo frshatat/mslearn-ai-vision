@@ -1,13 +1,8 @@
 from dotenv import load_dotenv
 import os
-from array import array
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 import sys
-import time
 from matplotlib import pyplot as plt
-import numpy as np
-
-# Import namespaces
 from azure.cognitiveservices.vision.computervision import ComputerVisionClient
 from azure.cognitiveservices.vision.computervision.models import VisualFeatureTypes
 from msrest.authentication import CognitiveServicesCredentials
@@ -27,7 +22,6 @@ def main():
             image_file = sys.argv[1]
 
         # Authenticate Azure AI Vision client
-        print(ai_endpoint)
         cv_client = ComputerVisionClient(
             ai_endpoint,
             CognitiveServicesCredentials(ai_key)
@@ -43,15 +37,12 @@ def main():
 def AnalyzeImage(image_file, cv_client):
     print('\nAnalyzing', image_file)
 
-    # Specify features to be retrieved (OBJECTS)
-    analysis_features = [VisualFeatureTypes.objects]
-
     # Get image analysis
     with open(image_file, "rb") as image_stream:
-        analysis = cv_client.analyze_image_in_stream(image_stream, visual_features=analysis_features)
+        analysis = cv_client.analyze_image_in_stream(image_stream, visual_features=[VisualFeatureTypes.faces])
 
-    if analysis.objects:
-        print("\nPeople in the image:")
+    if analysis.faces:
+        print("\nFaces in the image:")
 
         # Prepare image for drawing
         image = Image.open(image_file)
@@ -59,26 +50,30 @@ def AnalyzeImage(image_file, cv_client):
         plt.axis('off')
         draw = ImageDraw.Draw(image)
         color = 'cyan'
+        font = ImageFont.load_default()
 
-        for obj in analysis.objects:
-            if obj.object_property == "person":
-                # Draw object bounding box
-                r = obj.rectangle
-                bounding_box = ((r.x, r.y), (r.x + r.w, r.y + r.h))
-                draw.rectangle(bounding_box, outline=color, width=3)
+        for face in analysis.faces:
+            # Draw face bounding box
+            r = face.face_rectangle
+            bounding_box = ((r.left, r.top), (r.left + r.width, r.top + r.height))
+            draw.rectangle(bounding_box, outline=color, width=3)
 
-                # Return the confidence of the person detected
-                print(" {} (confidence: {:.2f}%)".format(bounding_box, obj.confidence * 100))
+            # Add label with age
+            label = f"Age: {face.age if face.age else 'N/A'}"
+            text_bbox = draw.textbbox((r.left, r.top), label, font=font)
+            text_location = (r.left, r.top - (text_bbox[3] - text_bbox[1]))
+            draw.rectangle([text_location, (text_location[0] + (text_bbox[2] - text_bbox[0]), text_location[1] + (text_bbox[3] - text_bbox[1]))], fill=color)
+            draw.text(text_location, label, fill="black", font=font)
+
+            # Return the confidence of the face detected
+            print(" {} (age: {})".format(bounding_box, face.age if face.age else 'N/A'))
 
         # Save annotated image
         annotated_image_path = "annotated_" + os.path.basename(image_file)
         image.save(annotated_image_path)
         print(f"Annotated image saved as {annotated_image_path}")
     else:
-        print("Analysis failed.")
-        print("   Error reason: {}".format(analysis.reason))
-        print("   Error code: {}".format(analysis.error.code))
-        print("   Error message: {}".format(analysis.error.message))
-
+        print("No faces detected.")
+        
 if __name__ == "__main__":
     main()
